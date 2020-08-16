@@ -1,13 +1,13 @@
-#!/bin/sh
+#!/bin/sh -eu
 
 PREREQ=""
 
 prereqs()
 {
-	echo "${PREREQ}"
+	printf -- '%s\n' "${PREREQ}"
 }
 
-case "${1}" in
+case "${1:-}" in
  prereqs)
 	prereqs
 	exit 0

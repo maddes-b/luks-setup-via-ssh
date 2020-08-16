@@ -1,11 +1,11 @@
-#!/bin/sh -e
+#!/bin/sh -eu
 
 ### Check parameters
-[ -z "${1}" ] && { echo 'ERROR: No parameter given'; return 1 2>/dev/null || exit 1; }
-[ ! -d "${1}" ] && { echo 'ERROR: parameter not a directory'; return 1 2>/dev/null || exit 1; }
+[ -n "${1:-}" ] || { printf -- 'ERROR: No parameter given\n'; return 1 2>/dev/null || exit 1; }
+[ -d "${1}" ] || { printf -- 'ERROR: parameter not a directory\n'; return 1 2>/dev/null || exit 1; }
 
 ### Unmount /dev
-echo "Unmounting ${1}/dev"
+printf -- 'Unmounting %s/dev\n' "${1}"
 RC=0
 COUNT=0
 while [ "${COUNT}" -lt 10 ]
@@ -13,21 +13,21 @@ while [ "${COUNT}" -lt 10 ]
   COUNT="$(( ${COUNT} + 1 ))"
   for MOUNT in "${1}/dev/mqueue" "${1}/dev/shm" "${1}/dev/pts" "${1}/dev"
    do
-    grep -q -F -e "${MOUNT}" /proc/mounts && { umount "${MOUNT}" || true ; }
+    grep -q -F -e "${MOUNT}" /proc/mounts && { umount "${MOUNT}" || true ; } || true
   done
   grep -q -F -e "${1}/dev" /proc/mounts || { RC="${?}" ; break ; }
 done
-[ "${RC}" -eq 0 ] && {
-  echo "Couldn't umount ${1}/dev/pts ${1}/dev/shm ${1}/dev in ${COUNT} tries"
-  echo "Try to kill related processes (lsof/fuser) or reboot" ; printf '\a'
-}
+if [ "${RC}" -eq 0 ]; then
+  printf -- "Couldn't umount %s/dev/pts %s/dev/shm %s/dev in %s tries\n" "${1}" "${1}" "${1}" "${COUNT}"
+  printf -- 'Try to kill related processes (lsof/fuser) or reboot\n' ; printf -- '\a'
+fi
 
 ### Unmount /proc /sys /run
-echo "Unmounting ${1}/<system mounts>"
+printf -- 'Unmounting %s/<system mounts>\n' "${1}"
 for MOUNT in "${1}/sys" "${1}/proc" "${1}/run/lock" "${1}/run"
  do
   grep -q -F -e "${MOUNT}" /proc/mounts || continue
-  echo "Unmounting ${MOUNT}"
+  printf -- 'Unmounting %s\n' "${MOUNT}"
   while umount "${MOUNT}" 2>/dev/null
    do
     :

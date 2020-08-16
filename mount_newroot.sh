@@ -1,7 +1,10 @@
-#!/bin/sh -e
+#!/bin/sh -eu
 
 for SRC in /root/bin/luks_NEW*.inc ; do [ ! -s "${SRC}" ] || . "${SRC}" ; done
-[ -z "${NEWROOT}" ] && { echo 'ERROR: var NEWROOT not set'; return 1 2>/dev/null || exit 1; }
+if [ -z "${NEWROOT:-}" ]; then
+  echo 'ERROR: var NEWROOT not set'
+  return 1 2>/dev/null || exit 1
+fi
 
 . /root/bin/luks_debian.inc
 
@@ -21,8 +24,8 @@ grep -q -F -e "${MOUNTBASE} " /proc/mounts || {
   done
 }
 
-[ -d "${MOUNTBASE}/boot" ] && {
-  [ "${1}" != 'noboot' ] && {
+if [ -d "${MOUNTBASE}/boot" ]; then
+  if [ "${1:-}" != 'noboot' ]; then
     grep -q -F -e "${MOUNTBASE}/boot " /proc/mounts || {
       echo "Mounting ${NEWBOOTMOUNT} on ${MOUNTBASE}/boot"
       while mount "${NEWBOOTMOUNT}" "${MOUNTBASE}/boot" 2>/dev/null
@@ -34,15 +37,16 @@ grep -q -F -e "${MOUNTBASE} " /proc/mounts || {
       echo "Mounting ${NEWBOOTMOUNT} on ${MOUNTBASE}/boot via bind of /boot"
       mount --bind /boot "${MOUNTBASE}/boot"
     }
-  }
-  [ "${1}" = 'noboot' ] && grep -q -F -e "${MOUNTBASE}/boot " /proc/mounts && {
-    echo "Unmounting ${MOUNTBASE}/boot"
-    while umount "${MOUNTBASE}/boot" 2>/dev/null
-     do
-      :
-    done
-  }
-}
+  else
+    grep -q -F -e "${MOUNTBASE}/boot " /proc/mounts && {
+      echo "Unmounting ${MOUNTBASE}/boot"
+      while umount "${MOUNTBASE}/boot" 2>/dev/null
+       do
+        :
+      done
+    }
+  fi
+fi
 
 mount_sys.sh "${MOUNTBASE}"
 

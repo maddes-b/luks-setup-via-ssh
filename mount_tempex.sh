@@ -1,7 +1,10 @@
-#!/bin/sh -e
+#!/bin/sh -eu
 
 for SRC in /root/bin/luks_TEMPEX*.inc ; do [ ! -s "${SRC}" ] || . "${SRC}" ; done
-[ -z "${TEMPEX}" ] && { echo 'ERROR: var TEMPEX not set'; return 1 2>/dev/null || exit 1; }
+if [ -z "${TEMPEX:-}" ]; then
+  echo 'ERROR: var TEMPEX not set'
+  return 1 2>/dev/null || exit 1
+fi
 
 . /root/bin/luks_debian.inc
 

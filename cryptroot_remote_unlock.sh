@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/sh -eu
 
 #
 # This InitRAMFS hook provides:
@@ -34,10 +34,10 @@ PREREQ=""
 
 prereqs()
 {
-	echo "${PREREQ}"
+	printf -- '%s\n' "${PREREQ}"
 }
 
-case "${1}" in
+case "${1:-}" in
  prereqs)
 	prereqs
 	exit 0
@@ -59,7 +59,7 @@ PATH='/sbin:/bin'
 /scripts/local-top/cryptroot remote
 cat /conf/conf.d/cryptroot
 ls -la /dev/mapper
-echo 'Call "${SCRIPTNAME}_done" if all is unlocked'
+printf -- 'Call "${SCRIPTNAME}_done" if all is unlocked\n'
 __EOF
 chmod 700 "${DESTDIR}/bin/${SCRIPTNAME}"
 
@@ -70,7 +70,7 @@ for PID in $(ps | grep -e '/lib/cryptsetup/askpass' -e 'plymouth.*ask-for-passwo
  do
 	kill -9 "${PID}"
 done
-echo "On Debian 6.0 maybe have to call '${0}' several times"
+printf -- "On Debian 6.0 maybe have to call '${0}' several times\n"
 __EOF
 chmod 700 "${DESTDIR}/bin/${SCRIPTNAME}_done"
 

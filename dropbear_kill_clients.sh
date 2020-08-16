@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/sh -eu
 
 #
 # This InitRAMFS script provides:
@@ -17,7 +17,7 @@
 # How to use:
 # - Copy this hook script as /etc/initramfs-tools/scripts/local-bottom/dropbear_kill_clients.sh
 # - chmod +x /etc/initramfs-tools/scripts/local-bottom/dropbear_kill_clients.sh
-# - update-initramfs -u
+# - update-initramfs -u -k all
 #
 # History:
 # v1.0 - 2011-02-15
@@ -30,10 +30,10 @@ PREREQ=""
 
 prereqs()
 {
-	echo "${PREREQ}"
+	printf -- '%s\n' "${PREREQ}"
 }
 
-case "${1}" in
+case "${1:-}" in
  prereqs)
 	prereqs
 	exit 0
@@ -48,10 +48,10 @@ NAME=dropbear
 PROG=/sbin/dropbear
 
 # get all server pids that should be ignored
-ignore=""
+unset -v ignore
 for server in `cat /var/run/${NAME}*.pid`
  do
-	ignore="${ignore} ${server}"
+	ignore="${ignore:+${ignore} }${server}"
 done
 
 # get all running pids and kill client connections
@@ -66,14 +66,14 @@ for pid in `pidof "${NAME}"`
 	skip=0
 	for server in ${ignore}
 	 do
-		[ "${pid}" = "${server}" ] && {
+		if [ "${pid}" = "${server}" ]; then
 			skip=1
 			break
-		}
+		fi
 	done
-	[ "${skip}" -ne 0 ] && continue
+	[ "${skip}" -eq 0 ] || continue
 
 	# kill process
-	echo "${0}: Killing ${pid}..."
+	printf -- '%s\n' "${0}: Killing ${pid}..."
 	kill -KILL "${pid}"
 done

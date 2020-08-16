@@ -21,10 +21,10 @@ echo 'Setting help functions...' 1>&2
 ### Main Functions
 ###
 start_fs_subdevs () {
-  # Direction: bottom up
-  # 1 = Base Name of Variable, e.g. OLDROOT
-  # 2 = Start Level, e.g. _1
-  # 3 = Level, e.g. _1
+  ## Direction: bottom up
+  ## 1 = Base Name of Variable, e.g. OLDROOT
+  ## 2 = Start Level, e.g. _1
+  ## 3 = Level, e.g. _1
 
   local BASENAME
   local STARTLEVELS
@@ -39,22 +39,21 @@ start_fs_subdevs () {
 
   local SUBLEVEL
 
-  [ -z "${1}" ] && {
+  if [ -z "${1:-}" ]; then
     echo "Usage: start_fs_subdevs <var name> [<start level prefix>]" 1>&2
     return 1 2>/dev/null || exit 1
-  }
+  fi
 
   BASENAME="${1}"
-  STARTLEVELS="${2}"
-  LEVELS="${3}"
-  [ -z "${LEVELS}" ] && LEVELS='0'
+  STARTLEVELS="${2:-}"
+  LEVELS="${3:-0}"
 
   for LEVEL in ${LEVELS}
    do
-    [ "${LEVEL}" = '0' ] && unset LEVEL
+    [ "${LEVEL}" != '0' ] || LEVEL=''
 
     SKIP=0
-    [ -n "${STARTLEVELS}" ] && {
+    if [ -n "${STARTLEVELS}" ]; then
       SKIP=1
       for SUBLEVEL in ${STARTLEVELS}
        do
@@ -65,7 +64,7 @@ start_fs_subdevs () {
                               ;;
               esac"
       done
-    }
+    fi
 
     for SUBLEVEL in $(eval echo "\"\${${BASENAME}${LEVEL}SUBLEVELS}\"")
      do
@@ -76,7 +75,7 @@ start_fs_subdevs () {
     TYPE="$(eval echo "\"\${${BASENAME}${LEVEL}TYPE}\"")"
 
     echo ">> START level ${LEVEL:-top}: ${DEV} via ${TYPE}"
-    if [ "${SKIP}" -eq 1 ]; then
+    if [ "${SKIP}" -ne 0 ]; then
       echo '...skipping'
     else
       RC=0
@@ -86,7 +85,7 @@ start_fs_subdevs () {
              ;;
        (luks) DMNAME="$(eval echo "\"\${${BASENAME}${LEVEL}DMNAME}\"")"
               [ -e "/dev/mapper/${DMNAME}" ] || {
-                if [ "${DEBVERSION}" -le 4 ] ; then
+                if [ "${DEBVERSION}" -le 4 ]; then
                   cryptsetup luksOpen "$(eval echo "\${${BASENAME}${LEVEL}SUBDEVS}")" "${DMNAME}" || { return 1 2>/dev/null || exit 1 ; }
                 else
                   cryptdisks_start "${DMNAME}" || cryptsetup luksOpen "$(eval echo "\${${BASENAME}${LEVEL}SUBDEVS}")" "${DMNAME}" || { return 1 2>/dev/null || exit 1 ; }
@@ -94,18 +93,18 @@ start_fs_subdevs () {
               }
               ;;
        (mdadm) mdadm --detail "${DEV}" --test --brief 1>/dev/null 2>&1 || RC="${?}"
-               [ "${RC}" -ge 2 ] && {
+               if [ "${RC}" -ge 2 ]; then
                  DEVALT="$(eval echo "\"\${${BASENAME}${LEVEL}ALT}\"")"
                  mdadm --assemble "${DEV}" || mdadm --assemble "${DEVALT}" || { return 1 2>/dev/null || exit 1 ; }
-               }
+               fi
                mdadm_wait "${DEV}" ; # TAKES TIME!!!
                mdadm --detail "${DEV}"
-               printf '\a'
+               printf -- '\a'
                ;;
        (mbr|gpt) ;;
        (*) echo "> ATTENTION! Type \"${TYPE}\" of ${DEV} is not supported or unknown, therefore"
            echo '  it has to be handled manually/individually if any action is required.'
-           printf '\a'
+           printf -- '\a'
            return 1 2>/dev/null || exit 1
            ;;
       esac
@@ -133,22 +132,21 @@ stop_fs_subdevs () {
 
   local SUBLEVEL
 
-  [ -z "${1}" ] && {
+  if [ -z "${1:-}" ]; then
     echo "Usage: stop_fs_subdevs <var name> [<stop level prefix>]" 1>&2
     return 1 2>/dev/null || exit 1
-  }
+  fi
 
   BASENAME="${1}"
-  STOPLEVELS="${2}"
-  LEVELS="${3}"
-  [ -z "${LEVELS}" ] && LEVELS='0'
+  STOPLEVELS="${2:-}"
+  LEVELS="${3:-0}"
 
   for LEVEL in ${LEVELS}
    do
-    [ "${LEVEL}" = '0' ] && unset LEVEL
+    [ "${LEVEL}" != '0' ] || LEVEL=''
 
     SKIP=0
-    [ -n "${STOPLEVELS}" ] && {
+    if [ -n "${STOPLEVELS}" ]; then
       for SUBLEVEL in ${STOPLEVELS}
        do
 # eval hack, due to shells not being able to handle ORs (=pipe symbol) in variables
@@ -158,13 +156,13 @@ stop_fs_subdevs () {
                               ;;
               esac"
       done
-    }
+    fi
 
     DEV="$(eval echo "\"\${${BASENAME}${LEVEL}}\"")"
     TYPE="$(eval echo "\"\${${BASENAME}${LEVEL}TYPE}\"")"
 
     echo ">> STOP level ${LEVEL:-top}: ${DEV} via ${TYPE}"
-    if [ "${SKIP}" -eq 1 ] ; then
+    if [ "${SKIP}" -ne 0 ]; then
       echo '...skipping'
     else
       case "${TYPE}" in
@@ -172,7 +170,7 @@ stop_fs_subdevs () {
        (lvm) lvm vgchange -a n "$(eval echo "\${${BASENAME}${LEVEL}VG}")"
              ;;
        (luks) DMNAME="$(eval echo "\"\${${BASENAME}${LEVEL}DMNAME}\"")"
-              if [ "${DEBVERSION}" -le 4 ] ; then
+              if [ "${DEBVERSION}" -le 4 ]; then
                 cryptsetup luksClose "${DMNAME}"
               else
                 cryptdisks_stop "${DMNAME}"
@@ -183,7 +181,7 @@ stop_fs_subdevs () {
        (mbr|gpt) ;;
        (*) echo "> ATTENTION! Type \"${TYPE}\" of ${DEV} is not supported or unknown, therefore"
            echo '  it has to be handled manually/individually if any action is required.'
-           printf '\a'
+           printf -- '\a'
            return 1 2>/dev/null || exit 1
            ;;
       esac
@@ -215,22 +213,21 @@ check_fs_subdevs () {
 
   local SUBLEVEL
 
-  [ -z "${1}" ] && {
+  if [ -z "${1:-}" ]; then
     echo "Usage: check_fs_subdevs <var name> [<stop level prefix>]" 1>&2
     return 1 2>/dev/null || exit 1
-  }
+  fi
 
   BASENAME="${1}"
-  STOPLEVELS="${2}"
-  LEVELS="${3}"
-  [ -z "${LEVELS}" ] && LEVELS='0'
+  STOPLEVELS="${2:-}"
+  LEVELS="${3:-0}"
 
   for LEVEL in ${LEVELS}
    do
-    [ "${LEVEL}" = '0' ] && unset LEVEL
+    [ "${LEVEL}" != '0' ] || LEVEL=''
 
     SKIP=0
-    [ -n "${STOPLEVELS}" ] && {
+    if [ -n "${STOPLEVELS}" ]; then
       for SUBLEVEL in ${STOPLEVELS}
        do
 # eval hack, due to shells not being able to handle ORs (=pipe symbol) in variables
@@ -240,39 +237,41 @@ check_fs_subdevs () {
                               ;;
               esac"
       done
-    }
+    fi
 
     DEV="$(eval echo "\"\${${BASENAME}${LEVEL}}\"")"
     TYPE="$(eval echo "\"\${${BASENAME}${LEVEL}TYPE}\"")"
 
     echo ">> CHECK level ${LEVEL:-top}: ${DEV} via ${TYPE}"
-    if [ "${SKIP}" -eq 1 ] ; then
+    if [ "${SKIP}" -ne 0 ]; then
       echo '...skipping'
     else
       case "${TYPE}" in
        (ext2|ext3|ext4) fsck -f "${DEV}"
-                        printf '\a'
+                        printf -- '\a'
                         ;;
        (lvm) lvm vgck
-             [ "${DEBVERSION}" -ge 5 ] && lvm pvck "$(eval echo "\${${BASENAME}${LEVEL}SUBDEVS}")"
+             if [ "${DEBVERSION}" -ge 5 ]; then
+               lvm pvck "$(eval echo "\${${BASENAME}${LEVEL}SUBDEVS}")"
+             fi
              echo '> ATTENTION! lvm is not supported, as its setup can be very complex (*),'
              echo '  therefore lvm volumes, groups and devs have to be handled manually/individually.'
              echo '  (*) multiple volumes in one group and/or multiple devs'
              echo '      with different sizes in one group.'
-             printf '\a'
+             printf -- '\a'
              ;;
        (luks) ;;
        (mdadm) echo '> Calling repair for mdadm raid device to detect defective sectors in advance.'
-               echo '  Monitoring is possible in another session via "watch cat /proc/mdstat"'
+               echo '  Monitoring is possible in another session via "watch -- cat /proc/mdstat"'
                echo 'repair' > /sys/block/${DEV##*/}/md/sync_action
                mdadm_wait "${DEV}" ; # TAKES TIME!!!
                mdadm --detail "${DEV}"
-               printf '\a'
+               printf -- '\a'
                ;;
        (mbr|gpt) ;;
        (*) echo "> ATTENTION! Type \"${TYPE}\" of ${DEV} is not supported or unknown, therefore"
            echo '  it has to be handled manually/individually if any action is required.'
-           printf '\a'
+           printf -- '\a'
            ;;
       esac
     fi
@@ -318,25 +317,24 @@ shrink_fs_subdevs () {
   local SUBDEVS
   local SUBLEVELS
 
-  [ -z "${1}" ] && {
+  if [ -z "${1:-}" ]; then
     echo "Usage: shrink_fs_subdevs <var name> [<start level prefix> [<restart direction> [<levels> [<upper level]]]" 1>&2
     return 1 2>/dev/null || exit 1
-  }
+  fi
 
   BASENAME="${1}"
-  STARTLEVELS="${2}"
-  RESTART="${3}"
-  LEVELS="${4}"
-  UPPERLEVEL="${5}"
-  [ -z "${LEVELS}" ] && LEVELS='0'
+  STARTLEVELS="${2:-}"
+  RESTART="${3:-}"
+  LEVELS="${4:-0}"
+  UPPERLEVEL="${5:-}"
 
   for LEVEL in ${LEVELS}
    do
-    [ "${LEVEL}" = '0' ] && unset LEVEL
+    [ "${LEVEL}" != '0' ] || LEVEL=''
 
     SKIP=0
-    [ -n "${STARTLEVELS}" ] && {
-      if [ "${RESTART}" != 'U' ] ; then
+    if [ -n "${STARTLEVELS}" ]; then
+      if [ "${RESTART}" != 'U' ]; then
         SKIP=1
         SKIPVALUE=0
       else
@@ -352,27 +350,27 @@ shrink_fs_subdevs () {
                               ;;
               esac"
       done
-    }
+    fi
 
     DEV="$(eval echo "\"\${${BASENAME}${LEVEL}}\"")"
     TYPE="$(eval echo "\"\${${BASENAME}${LEVEL}TYPE}\"")"
     SIZE="$(eval echo "\"\${${BASENAME}${LEVEL}SIZEMIN}\"")"
 
     # Direction: top down
-    [ "${SKIP}" -eq 0 -a "${RESTART}" != 'U' ] && {
+    if [ "${SKIP}" -eq 0 -a "${RESTART}" != 'U' ]; then
       echo ">> SHRINK level ${LEVEL:-top}: ${DEV} via ${TYPE} to ${SIZE} MiB"
       case "${TYPE}" in
        (ext2|ext3|ext4) SUBSIZE="$(${CALL_ENV} dumpe2fs -h "${DEV}" 2>/dev/null | sed -n -e 's#^Block size:[[:space:]]\+##p')"
                         BLOCKS="$(${CALL_ENV} resize2fs -P "${DEV}" 2>/dev/null | sed -n 's#^Estimated minimum size of the filesystem:[[:space:]]\+##p')"
                         SUBSIZE="$(( ${BLOCKS:-0} * ${SUBSIZE} / 1024 / 1024 + 1 ))"
-                        [ "${SUBSIZE}" -gt "${SIZE}" ] && {
+                        if [ "${SUBSIZE}" -gt "${SIZE}" ]; then
                           echo "> Have to resize file system in two steps as current minimal size is ${SUBSIZE} MiB"
                           SUBSIZE="$(( ${SUBSIZE} + 100 ))"
                           echo "> First resize to ${SUBSIZE} MiB"
                           resize2fs "${DEV}" ${SUBSIZE}M || { return 1 2>/dev/null || exit 1 ; }
                           fsck -f "${DEV}"
                           echo "> Now resize to ${SIZE} MiB"
-                        }
+                        fi
                         resize2fs "${DEV}" ${SIZE}M || { return 1 2>/dev/null || exit 1 ; }
                         fsck -f "${DEV}"
                         ;;
@@ -395,17 +393,17 @@ shrink_fs_subdevs () {
              echo "  and maintain these sizes in /root/bin/luks_${BASENAME}.inc"
              echo "  Reload definitions, resize physical volume(s) via pvresize and continue"
              echo "  with shrinking the sub devices."
-             if [ "${DEBVERSION}" -le 4 ] ; then
+             if [ "${DEBVERSION}" -le 4 ]; then
                echo "    lvm lvdisplay -v -m"
-             else
-               echo "    lvm pvdisplay -v -m ${SUBDEVS} ; #or lvm pvs -v --units m --segments ${SUBDEVS}"
              fi
+             echo "    lvm pvdisplay -v -m ${SUBDEVS} ; #or lvm pvs -v --units m --segments ${SUBDEVS}"
              echo "    lvm pvmove --alloc anywhere -n <lv> <dev>[:<oldstart>+<size>] <dev>:<newstart>+<size>"
              echo "    # optionally remove cleared pv from vg and pv itself"
              echo "    #lvm vgreduce '${VG}' <pv>"
              echo "    #lvm pvremove <pv>"
              echo "    #remove_fs_subdevs '${BASENAME}' '' <level of pv, see below pvresize>"
-             echo "    pvs --units m -o pv_name,pv_used ${SUBDEVS}"
+             echo "    vgs --units m -o vg_name,vg_size,vg_free '${VG}'"
+             echo "    pvs --units m -o pv_name,pv_size,pv_free,pv_used ${SUBDEVS}"
              echo "    nano '/root/bin/luks_${BASENAME}.inc'"
              for SUBLEVEL in ${SUBLEVELS}
               do
@@ -421,7 +419,7 @@ shrink_fs_subdevs () {
              lvm lvs --units m -o +devices "${VG}"
              echo "Shrinking volume ${DEV}..."
              lvm lvresize --size ${SIZE}m "${DEV}" || true
-             printf '\a'
+             printf -- '\a'
              return 1 2>/dev/null || exit 1
              ;;
        (luks) SUBSIZE="$(( ${SIZE} * 1024 * 2 ))"  # Convert MiB to 512-byte-sectors
@@ -430,7 +428,7 @@ shrink_fs_subdevs () {
        (mdadm) SUBTYPE="$(eval echo "\"\${${BASENAME}${LEVEL}METADATA}\"")"
                # "grow" raid array
                mdadm --grow "${DEV}" --bitmap=none
-               if [ "${DEBVERSION}" -le 5 ] ; then
+               if [ "${DEBVERSION}" -le 5 ]; then
                  SUBSIZE="$(( ${SIZE} * 1024 ))"
                  echo "Applying --grow ${DEV} --size=${SUBSIZE} in KiB"
                  mdadm --grow "${DEV}" --size=${SUBSIZE} || { return 1 2>/dev/null || exit 1 ; }
@@ -438,54 +436,64 @@ shrink_fs_subdevs () {
                  echo "Applying --grow ${DEV} --size=${SIZE}M"
                  mdadm --grow "${DEV}" --size=${SIZE}M || { return 1 2>/dev/null || exit 1 ; }
                fi
-               mdadm_wait "${DEV}" ; printf '\a' ; # TAKES TIME!!!
-               [ "${SUBTYPE}" = '0.90' -o "${SUBTYPE}" = '1.0' -o "${DEBVERSION}" -ge 7 ] && mdadm --grow "${DEV}" --bitmap=internal
+               mdadm_wait "${DEV}" ; printf -- '\a' ; # TAKES TIME!!!
+               if [ "${SUBTYPE}" = '0.90' -o "${SUBTYPE}" = '1.0' -o "${DEBVERSION}" -ge 7 ]; then
+                 mdadm --grow "${DEV}" --bitmap=internal
+               fi
                # update device sizes
                echo '> ATTENTION! mdadm subdevices have to be manually removed, resized and added'
                echo '  again, due to loosing consistency when shrinking subdevices below their'
                echo '  known device size.'
                mdadm_new_devicesize_via_remove_add "${BASENAME}" "${LEVEL}" "${DEV}" "${SUBTYPE}" 'shrink_fs_subdevs' 'X'
                echo "shrink_fs_subdevs '${BASENAME}' '${UPPERLEVEL}' 'U'"
-               printf '\a'
+               printf -- '\a'
                return 1 2>/dev/null || exit 1
                ;;
        (mbr) SUBDEVS="$(eval echo "\"\${${BASENAME}${LEVEL}SUBDEVS}\"")"
              PART="$(eval echo "\"\${${BASENAME}${LEVEL}SUBPART}\"")"
              SUBSIZE="$(( ${SIZE} * 1024 ))"
              SUBTYPE="$([ "${PART}" -le 4 ] && echo 'p' || echo 'l')"
-             [ -n "${FDISKCPARM}" ] && sfdisk -l -u S -q ${SUBDEVS}
+             [ -z "${FDISKCPARM}" ] || sfdisk -l -u S -q ${SUBDEVS}
              echo "> ${BASENAME} partition is ${PART}"
-             [ -z "${FDISKCPARM}" ] && {
+             if [ -z "${FDISKCPARM}" ]; then
                echo ">  [c]  # toggle DOS mode on/off, depends where the root partition starts, e.g. start sector 63 needs DOS compatibility on"
                echo ">  p"
-             }
+             fi
              echo ">  d --> ${PART}"
              echo ">  n --> ${SUBTYPE} --> ${PART} --> Start Sector of partition ${PART} from previous p output (normally just <Enter>)"
              echo -n '   --> '
-             [ "${DEBVERSION}" -ge 6 ] && {
+             if [ "${DEBVERSION}" -ge 6 ]; then
                SUBSIZE="$(( ${SIZE} * 1024 ))"
                echo -n "+${SUBSIZE}K or "
-             }
+             fi
              echo -n '+(sectors-1)'
              for SECSIZE in 512 1024 2048 4096
               do
                SUBSIZE="$(( ( ${SIZE} * 1024 * 1024 ) / ${SECSIZE} ))"
                echo -n " ${SUBSIZE}s(${SECSIZE})"
              done
-             printf '\n'
+             printf -- '\n'
              echo "   Do *NOT* remove any signatures, otherwise you will destroy your data."
              echo ">  t --> ${PART} --> Type Code from previous p output"
              echo ">  p"
              echo ">  w (otherwise abort with q)"
              echo ">  ATTENTION! partprobe || blockdev --rereadpt ${SUBDEVS} ; # otherwise reboot"
              echo '>  for SRC in /root/bin/luks_*.inc ; do . "${SRC}" ; done'
-             [ "${RESTART}" = 'D' ] && echo ">  and continue with SUBDEVICE='${DEV}' ; LEVEL='${LEVEL}'" || echo ">  shrink_fs_subdevs '${BASENAME}' '${UPPERLEVEL}' 'U'"
-			 fdisk -u ${FDISKCPARM} ${SUBDEVS}
-             unset SUBSIZE
-             unset SECSIZE
+             if [ "${RESTART}" = 'D' ]; then
+               echo ">  and continue with SUBDEVICE='${DEV}' ; LEVEL='${LEVEL}'"
+             else
+               echo ">  shrink_fs_subdevs '${BASENAME}' '${UPPERLEVEL}' 'U'"
+             fi
+             fdisk -u ${FDISKCPARM} ${SUBDEVS}
+             unset -v SUBSIZE
+             unset -v SECSIZE
              echo ">  ATTENTION! partprobe || blockdev --rereadpt ${SUBDEVS} ; # otherwise reboot"
              echo '>  for SRC in /root/bin/luks_*.inc ; do . "${SRC}" ; done'
-             [ "${RESTART}" = 'D' ] && echo ">  and continue with SUBDEVICE='${DEV}' ; LEVEL='${LEVEL}'" || echo ">  shrink_fs_subdevs '${BASENAME}' '${UPPERLEVEL}' 'U'"
+             if [ "${RESTART}" = 'D' ]; then
+               echo ">  and continue with SUBDEVICE='${DEV}' ; LEVEL='${LEVEL}'"
+             else
+               echo ">  shrink_fs_subdevs '${BASENAME}' '${UPPERLEVEL}' 'U'"
+             fi
              return 1 2>/dev/null || exit 1
              ;;
        (gpt) SUBDEVS="$(eval echo "\"\${${BASENAME}${LEVEL}SUBDEVS}\"")"
@@ -500,33 +508,41 @@ shrink_fs_subdevs () {
              echo ">  w (otherwise abort with q)"
              echo ">  ATTENTION! partprobe || blockdev --rereadpt ${SUBDEVS} ; # otherwise reboot"
              echo '>  for SRC in /root/bin/luks_*.inc ; do . "${SRC}" ; done'
-             [ "${RESTART}" = 'D' ] && echo ">  and continue with SUBDEVICE='${DEV}' ; LEVEL='${LEVEL}'" || echo ">  shrink_fs_subdevs '${BASENAME}' '${UPPERLEVEL}' 'U'"
+             if [ "${RESTART}" = 'D' ]; then
+               echo ">  and continue with SUBDEVICE='${DEV}' ; LEVEL='${LEVEL}'"
+             else
+               echo ">  shrink_fs_subdevs '${BASENAME}' '${UPPERLEVEL}' 'U'"
+             fi
              gdisk ${SUBDEVS}
              echo ">  ATTENTION! partprobe || blockdev --rereadpt ${SUBDEVS} ; # otherwise reboot"
              echo '>  for SRC in /root/bin/luks_*.inc ; do . "${SRC}" ; done'
-             [ "${RESTART}" = 'D' ] && echo ">  and continue with SUBDEVICE='${DEV}' ; LEVEL='${LEVEL}'" || echo ">  shrink_fs_subdevs '${BASENAME}' '${UPPERLEVEL}' 'U'"
+             if [ "${RESTART}" = 'D' ]; then
+               echo ">  and continue with SUBDEVICE='${DEV}' ; LEVEL='${LEVEL}'"
+             else
+               echo ">  shrink_fs_subdevs '${BASENAME}' '${UPPERLEVEL}' 'U'"
+             fi
              return 1 2>/dev/null || exit 1
              ;;
        (*) echo "> ATTENTION! Type \"${TYPE}\" of ${DEV} is not supported or unknown, therefore"
            echo '  it has to be handled manually/individually if any action is required.'
            echo "shrink_fs_subdevs ${BASENAME} '$(eval echo "\"\${${BASENAME}${LEVEL}SUBLEVELS}\"")'"
-           printf '\a'
+           printf -- '\a'
            return 1 2>/dev/null || exit 1
            ;;
       esac
-    }
+    fi
 
-    [ "${SKIP}" -eq 0 -o "${RESTART}" != 'U' ] && {
+    if [ "${SKIP}" -eq 0 -o "${RESTART}" != 'U' ]; then
       RC=0
       for SUBLEVEL in $(eval echo "\"\${${BASENAME}${LEVEL}SUBLEVELS}\"")
        do
         shrink_fs_subdevs "${BASENAME}" "${STARTLEVELS}" "${RESTART}" "${SUBLEVEL}" "${LEVEL:-0}" || RC="$(( ${RC} + ${?} ))"
       done
       [ "${RC}" -ne 0 ] && { return 1 2>/dev/null || exit 1 ; }
-    }
+    fi
 
     # Direction: bottom up
-    [ "${SKIP}" -eq 0 -o "${RESTART}" != 'D' ] && {
+    if [ "${SKIP}" -eq 0 -o "${RESTART}" != 'D' ]; then
       case "${TYPE}" in
        (ext2|ext3|ext4) ;;
        (lvm) ;;
@@ -536,11 +552,11 @@ shrink_fs_subdevs () {
        (*) echo "> ATTENTION! Type \"${TYPE}\" of ${DEV} is not supported or unknown, therefore"
            echo '  it has to be handled manually/individually if any action is required.'
            echo "shrink_fs_subdevs '${BASENAME}' '${UPPERLEVEL}' 'U'"
-           printf '\a'
+           printf -- '\a'
            return 1 2>/dev/null || exit 1
            ;;
       esac
-    }
+    fi
   done
 
   return 0
@@ -572,25 +588,24 @@ maximize_fs_subdevs () {
   local SUBTYPE
   local RC
 
-  [ -z "${1}" ] && {
+  if [ -z "${1:-}" ]; then
     echo "Usage: maximize_fs_subdevs <var name> [<start level prefix> [<restart direction>]]" 1>&2
     return 1 2>/dev/null || exit 1
-  }
+  fi
 
   BASENAME="${1}"
-  STARTLEVELS="${2}"
-  RESTART="${3}"
-  LEVELS="${4}"
-  UPPERLEVEL="${5}"
-  [ -z "${LEVELS}" ] && LEVELS='0'
+  STARTLEVELS="${2:-}"
+  RESTART="${3:-}"
+  LEVELS="${4:-0}"
+  UPPERLEVEL="${5:-}"
 
   for LEVEL in ${LEVELS}
    do
-    [ "${LEVEL}" = '0' ] && unset LEVEL
+    [ "${LEVEL}" != '0' ] || LEVEL=''
 
     SKIP=0
-    [ -n "${STARTLEVELS}" ] && {
-      if [ "${RESTART}" = 'D' ] ; then
+    if [ -n "${STARTLEVELS}" ]; then
+      if [ "${RESTART}" = 'D' ]; then
         SKIP=1
         SKIPVALUE=0
       else
@@ -606,20 +621,20 @@ maximize_fs_subdevs () {
                               ;;
               esac"
       done
-    }
+    fi
 
     DEV="$(eval echo "\"\${${BASENAME}${LEVEL}}\"")"
     TYPE="$(eval echo "\"\${${BASENAME}${LEVEL}TYPE}\"")"
 
     # Direction: top down
-    [ "${SKIP}" -eq 0 -a "${RESTART}" != 'U' -a "${RESTART}" != 'U2' ] && {
+    if [ "${SKIP}" -eq 0 -a "${RESTART}" != 'U' -a "${RESTART}" != 'U2' ]; then
       case "${TYPE}" in
        (ext2|ext3|ext4) ;;
        (lvm) ;;
        (luks) ;;
        (mdadm) SUBTYPE="$(eval echo "\"\${${BASENAME}${LEVEL}METADATA}\"")"
                # special case: update device sizes differently
-               if [ "${SUBTYPE}" = '0.90' -o "${SUBTYPE}" = '1.0' ] ; then
+               if [ "${SUBTYPE}" = '0.90' -o "${SUBTYPE}" = '1.0' ]; then
                  echo ">> MAXIMIZE level ${LEVEL:-top}: ${DEV} via ${TYPE}"
                  echo "> ATTENTION! mdadm super block of version ${SUBTYPE} found which is located at the"
                  echo '  end of its subdevices, therefore devices have to be manually removed,'
@@ -627,7 +642,7 @@ maximize_fs_subdevs () {
                  echo '  (see https://lists.fedoraproject.org/pipermail/users/2010-May/373580.html #15)'
                  mdadm_new_devicesize_via_remove_add "${BASENAME}" "${LEVEL}" "${DEV}" "${SUBTYPE}" 'maximize_fs_subdevs'
                  echo "maximize_fs_subdevs '${BASENAME}' '${LEVEL}' 'U'"
-                 printf '\a'
+                 printf -- '\a'
                  return 1 2>/dev/null || exit 1
                fi
                ;;
@@ -635,23 +650,23 @@ maximize_fs_subdevs () {
        (*) echo "> ATTENTION! Type \"${TYPE}\" of ${DEV} is not supported or unknown, therefore"
            echo '  it has to be handled manually/individually if any action is required.'
            echo "maximize_fs_subdevs '${BASENAME}' '$(eval echo "\${${BASENAME}${LEVEL}SUBLEVELS}")'"
-           printf '\a'
+           printf -- '\a'
            return 1 2>/dev/null || exit 1
            ;;
       esac
-    }
+    fi
 
-    [ "${SKIP}" -eq 0 -o "${RESTART}" = 'D' ] && {
+    if [ "${SKIP}" -eq 0 -o "${RESTART}" = 'D' ]; then
       RC=0
       for SUBLEVEL in $(eval echo "\"\${${BASENAME}${LEVEL}SUBLEVELS}\"")
        do
         maximize_fs_subdevs "${BASENAME}" "${STARTLEVELS}" "${RESTART}" "${SUBLEVEL}" "${LEVEL:-0}" || RC="$(( ${RC} + ${?} ))"
       done
-      [ "${RC}" -ne 0 ] && { return 1 2>/dev/null || exit 1 ; }
-    }
+      [ "${RC}" -eq 0 ] || { return 1 2>/dev/null || exit 1 ; }
+    fi
 
     # Direction: bottom up
-    [ "${SKIP}" -eq 0 -o "${RESTART}" != 'D' ] && {
+    if [ "${SKIP}" -eq 0 -o "${RESTART}" != 'D' ]; then
       echo ">> MAXIMIZE level ${LEVEL:-top}: ${DEV} via ${TYPE}"
       case "${TYPE}" in
        (ext2|ext3|ext4) resize2fs "${DEV}"
@@ -660,24 +675,26 @@ maximize_fs_subdevs () {
        (lvm) echo '> ATTENTION! It is not recommended to maximize volumes without need,'
              echo '  therefore lvm volumes, groups and devs have to be handled manually/individually.'
              echo "  (*) lvm vgs --units m '$(eval echo "\${${BASENAME}${LEVEL}VG}")'"
-             echo "      lvm lvresize -l 50%VG '${DEV}'"
+             if [ "${DEBVERSION}" -ge 5 ]; then
+               echo "      lvm lvresize -l 50%VG '${DEV}'"
+             fi
              echo "      lvm lvresize -L 10g '${DEV}'"
              echo "      maximize_fs_subdevs '${BASENAME}' '${UPPERLEVEL}' 'U'"
              SUBDEVS="$(eval echo "\"\${${BASENAME}${LEVEL}SUBDEVS}\"")"
              echo "Resizing devices ${SUBDEVS}..."
              lvm pvresize ${SUBDEVS}
-             printf '\a'
+             printf -- '\a'
              return 1 2>/dev/null || exit 1
              ;;
        (luks) cryptsetup resize "$(eval echo "\${${BASENAME}${LEVEL}DMNAME}")" || { return 1 2>/dev/null || exit 1 ; }
               ;;
        (mdadm) SUBTYPE="$(eval echo "\"\${${BASENAME}${LEVEL}METADATA}\"")"
                # update device sizes
-               if [ "${SUBTYPE}" = '0.90' -o "${SUBTYPE}" = '1.0' ] ; then
+               if [ "${SUBTYPE}" = '0.90' -o "${SUBTYPE}" = '1.0' ]; then
                  :
-               elif [ "${DEBVERSION}" -le 6 -a "${RESTART}" != 'D' -a "${RESTART}" != 'U2' ] ; then
+               elif [ "${DEBVERSION}" -le 6 -a "${RESTART}" != 'D' -a "${RESTART}" != 'U2' ]; then
                  RC=0
-                 if [ "${DEBVERSION}" -le 4 ] ; then
+                 if [ "${DEBVERSION}" -le 4 ]; then
                    echo "> ATTENTION! mdadm of Debian ${DEBVERSION} doesn't provide --update=devicesize,"
                    echo '  therefore devices have to be manually removed, resized and added again.'
                    echo '  (see https://lists.fedoraproject.org/pipermail/users/2010-May/373580.html #15)'
@@ -686,34 +703,36 @@ maximize_fs_subdevs () {
                    stop_fs_subdevs "${BASENAME}" "${LEVEL}"
                    mdadm --stop "${DEV}" || RC="${?}"
                  fi
-                 [ "${RC}" -ne 0 ] && {
+                 if [ "${RC}" -ne 0 ]; then
                    mdadm_new_devicesize_via_remove_add "${BASENAME}" "${LEVEL}" "${DEV}" "${SUBTYPE}" 'maximize_fs_subdevs'
                    echo "maximize_fs_subdevs '${BASENAME}' '${LEVEL}' 'U2'"
-                   printf '\a'
+                   printf -- '\a'
                    return 1 2>/dev/null || exit 1
-                 }
+                 fi
                  echo "  Using --assemble ${DEV} --update=devicesize"
                  DEVALT="$(eval echo "\"\${${BASENAME}${LEVEL}ALT}\"")"
                  mdadm --assemble "${DEV}" --update=devicesize || mdadm --assemble "${DEVALT}" --update=devicesize || { return 1 2>/dev/null || exit 1 ; }
                fi
                # grow raid array
-               if [ "${DEBVERSION}" -le 4 -a "${SUBTYPE}" != '0.90' -a "${SUBTYPE}" != '1.0' ] ; then
+               if [ "${DEBVERSION}" -le 4 -a "${SUBTYPE}" != '0.90' -a "${SUBTYPE}" != '1.0' ]; then
                  echo "> ATTENTION! mdadm of Debian ${DEBVERSION} will destroy raids with super block of version ${SUBTYPE}"
                  echo '  when growing with --size=max, therefore calculate the new size manually.'
                  echo '  Only use full MiBs and leave several MiBs unused so that growing will not fail.'
                  echo '  Note that size has to be specified in KiB.'
                  echo "mdadm --grow '${DEV}' --size=..."
-                 echo "mdadm_wait '${DEV}' ; mdadm --detail '${DEV}' ; printf '\\a' ; # TAKES TIME!!!"
+                 echo "mdadm_wait '${DEV}' ; mdadm --detail '${DEV}' ; printf -- '\\a' ; # TAKES TIME!!!"
                  echo "start_fs_subdevs '${BASENAME}'"
                  echo "maximize_fs_subdevs '${BASENAME}' '${UPPERLEVEL}' 'U'"
-                 printf '\a'
+                 printf -- '\a'
                  return 1 2>/dev/null || exit 1
                else
                  mdadm --grow "${DEV}" --bitmap=none
                  echo "  Using --grow ${DEV} --size=max"
                  mdadm --grow "${DEV}" --size=max || { return 1 2>/dev/null || exit 1 ; }
-                 mdadm_wait "${DEV}" ; printf '\a' ; # TAKES TIME!!!
-                 [ "${SUBTYPE}" = '0.90' -o "${SUBTYPE}" = '1.0' -o "${DEBVERSION}" -ge 7 ] && mdadm --grow "${DEV}" --bitmap=internal
+                 mdadm_wait "${DEV}" ; printf -- '\a' ; # TAKES TIME!!!
+                 if [ "${SUBTYPE}" = '0.90' -o "${SUBTYPE}" = '1.0' -o "${DEBVERSION}" -ge 7 ]; then
+                   mdadm --grow "${DEV}" --bitmap=internal
+                 fi
                  start_fs_subdevs "${BASENAME}"
                fi
                :  # NOP to kill exit code
@@ -721,12 +740,12 @@ maximize_fs_subdevs () {
        (mbr) SUBDEVS="$(eval echo "\"\${${BASENAME}${LEVEL}SUBDEVS}\"")"
              PART="$(eval echo "\"\${${BASENAME}${LEVEL}SUBPART}\"")"
              SUBTYPE="$([ "${PART}" -le 4 ] && echo 'p' || echo 'l')"
-             [ -n "${FDISKCPARM}" ] && sfdisk -l -u S -q ${SUBDEVS}
+             [ -z "${FDISKCPARM}" ] || sfdisk -l -u S -q ${SUBDEVS}
              echo "> ${BASENAME} partition is ${PART}"
-             [ -z "${FDISKCPARM}" ] && {
+             if [ -z "${FDISKCPARM}" ]; then
                echo ">  [c]  # toggle DOS mode on/off, depends where the root partition starts, e.g. start sector 63 needs DOS compatibility on"
                echo ">  p"
-             }
+             fi
              echo ">  d --> ${PART}"
              echo ">  n --> ${SUBTYPE} --> ${PART} --> Start Sector of partition ${PART} from previous p output (normally just <Enter>)"
              echo "   --> Last available sector (normally just <Enter>)"
@@ -736,11 +755,19 @@ maximize_fs_subdevs () {
              echo ">  w (otherwise abort with q)"
              echo ">  ATTENTION! partprobe || blockdev --rereadpt ${SUBDEVS} ; # otherwise reboot"
              echo '>  for SRC in /root/bin/luks_*.inc ; do . "${SRC}" ; done'
-             [ "${RESTART}" = 'D' ] && echo '>  and continue' || echo ">  maximize_fs_subdevs '${BASENAME}' '${UPPERLEVEL}' 'U'"
+             if [ "${RESTART}" = 'D' ]; then
+               echo ">  and continue with SUBDEVICE='${DEV}' ; LEVEL='${LEVEL}'"
+             else
+               echo ">  maximize_fs_subdevs '${BASENAME}' '${UPPERLEVEL}' 'U'"
+             fi
              fdisk -u ${FDISKCPARM} ${SUBDEVS}
              echo ">  ATTENTION! partprobe || blockdev --rereadpt ${SUBDEVS} ; # otherwise reboot"
              echo '>  for SRC in /root/bin/luks_*.inc ; do . "${SRC}" ; done'
-             [ "${RESTART}" = 'D' ] && echo '>  and continue' || echo ">  maximize_fs_subdevs '${BASENAME}' '${UPPERLEVEL}' 'U'"
+             if [ "${RESTART}" = 'D' ]; then
+               echo ">  and continue with SUBDEVICE='${DEV}' ; LEVEL='${LEVEL}'"
+             else
+               echo ">  maximize_fs_subdevs '${BASENAME}' '${UPPERLEVEL}' 'U'"
+             fi
              return 1 2>/dev/null || exit 1
              ;;
        (gpt) SUBDEVS="$(eval echo "\"\${${BASENAME}${LEVEL}SUBDEVS}\"")"
@@ -756,21 +783,29 @@ maximize_fs_subdevs () {
              echo ">  w (otherwise abort with q)"
              echo ">  ATTENTION! partprobe || blockdev --rereadpt ${SUBDEVS} ; # otherwise reboot"
              echo '>  for SRC in /root/bin/luks_*.inc ; do . "${SRC}" ; done'
-             [ "${RESTART}" = 'D' ] && echo '>  and continue' || echo ">  maximize_fs_subdevs '${BASENAME}' '${UPPERLEVEL}' 'U'"
+             if [ "${RESTART}" = 'D' ]; then
+               echo ">  and continue with SUBDEVICE='${DEV}' ; LEVEL='${LEVEL}'"
+             else
+               echo ">  maximize_fs_subdevs '${BASENAME}' '${UPPERLEVEL}' 'U'"
+             fi
              gdisk ${SUBDEVS}
              echo ">  ATTENTION! partprobe || blockdev --rereadpt ${SUBDEVS} ; # otherwise reboot"
              echo '>  for SRC in /root/bin/luks_*.inc ; do . "${SRC}" ; done'
-             [ "${RESTART}" = 'D' ] && echo '>  and continue' || echo ">  maximize_fs_subdevs '${BASENAME}' '${UPPERLEVEL}' 'U'"
+             if [ "${RESTART}" = 'D' ]; then
+               echo ">  and continue with SUBDEVICE='${DEV}' ; LEVEL='${LEVEL}'"
+             else
+               echo ">  maximize_fs_subdevs '${BASENAME}' '${UPPERLEVEL}' 'U'"
+             fi
              return 1 2>/dev/null || exit 1
              ;;
        (*) echo "> ATTENTION! Type \"${TYPE}\" of ${DEV} is not supported or unknown, therefore"
            echo '  it has to be handled manually/individually if any action is required.'
            echo "maximize_fs_subdevs '${BASENAME}' '${UPPERLEVEL}' 'U'"
-           printf '\a'
+           printf -- '\a'
            return 1 2>/dev/null || exit 1
            ;;
       esac
-    }
+    fi
   done
 
   return 0
@@ -803,11 +838,11 @@ mdadm_new_devicesize_via_remove_add () {
   FNAME="${5}"
   DOSUBDEVS="${6}"
 
-  [ "${DEBVERSION}" -ge 7 -a "${SUBTYPE}" != '0.90' -a "${SUBTYPE}" != '1.0' ] && {
+  if [ "${DEBVERSION}" -ge 7 -a "${SUBTYPE}" != '0.90' -a "${SUBTYPE}" != '1.0' ]; then
     echo ''
     echo "mdadm --grow '${DEV}' --bitmap=internal"
     echo ''
-  }
+  fi
 
   echo '  Do the following for each subdevice, but only one subdevice at a time.'
   SUBCOUNT=0
@@ -825,21 +860,22 @@ mdadm_new_devicesize_via_remove_add () {
   echo '# do for each subdevice'
   echo "mdadm '${DEV}' --fail \"\${SUBDEVICE}\""
   echo "mdadm '${DEV}' --remove \"\${SUBDEVICE}\""
-  if [ "${SUBTYPE}" = '0.90' -o "${SUBTYPE}" = '1.0' -o "${DEBVERSION}" -le 6 ] ; then
+  if [ "${SUBTYPE}" = '0.90' -o "${SUBTYPE}" = '1.0' -o "${DEBVERSION}" -le 6 ]; then
     echo 'mdadm --zero-superblock "${SUBDEVICE}"'
   fi
-  if [ "${SUBTYPE}" = '0.90' -o "${SUBTYPE}" = '1.0' -o -n "${DOSUBDEVS}" ] ; then
+  if [ "${SUBTYPE}" = '0.90' -o "${SUBTYPE}" = '1.0' -o -n "${DOSUBDEVS}" ]; then
     echo "${FNAME} '${BASENAME}' \"\${LEVEL}\" 'D'"
     echo 'partprobe || blockdev --rereadpt "${SUBDEVICE}" ; # otherwise reboot'
     echo 'for SRC in /root/bin/luks_*.inc ; do . "${SRC}" ; done'
     echo "SUBDEVICE='...'"
   fi
-  if [ "${SUBTYPE}" = '0.90' -o "${SUBTYPE}" = '1.0' -o "${DEBVERSION}" -le 6 ] ; then
+  echo '# Monitoring is possible in another session via "watch -- cat /proc/mdstat".'
+  if [ "${SUBTYPE}" = '0.90' -o "${SUBTYPE}" = '1.0' -o "${DEBVERSION}" -le 6 ]; then
     echo "mdadm '${DEV}' --add \"\${SUBDEVICE}\""
   else
     echo "mdadm '${DEV}' --re-add --update=devicesize \"\${SUBDEVICE}\""
   fi
-  echo "mdadm_wait '${DEV}' ; mdadm --detail '${DEV}' ; printf '\\a' ; # TAKES TIME!!!"
+  echo "mdadm_wait '${DEV}' ; mdadm --detail '${DEV}' ; printf -- '\\a' ; # TAKES TIME!!!"
   echo "# repeat with next subdevice"
   echo ''
   echo "start_fs_subdevs '${BASENAME}'"
@@ -873,23 +909,22 @@ remove_fs_subdevs () {
 
   local SUBLEVEL
 
-  [ -z "${1}" ] && {
+  if [ -z "${1:-}" ]; then
     echo "Usage: remove_fs_subdevs <var name> [<stop level prefix> [level prefix> [<restart direction>]]]" 1>&2
     return 1 2>/dev/null || exit 1
-  }
+  fi
 
   BASENAME="${1}"
-  STOPLEVELS="${2}"
-  LEVELS="${3}"
-  RESTART="${4}"
-  [ -z "${LEVELS}" ] && LEVELS='0'
+  STOPLEVELS="${2:-}"
+  LEVELS="${3:-0}"
+  RESTART="${4:-}"
 
   for LEVEL in ${LEVELS}
    do
-    [ "${LEVEL}" = '0' ] && unset LEVEL
+    [ "${LEVEL}" != '0' ] || LEVEL=''
 
     SKIP=0
-    [ -n "${STOPLEVELS}" ] && {
+    if [ -n "${STOPLEVELS}" ]; then
       for SUBLEVEL in ${STOPLEVELS}
        do
 # eval hack, due to shells not being able to handle ORs (=pipe symbol) in variables
@@ -899,13 +934,13 @@ remove_fs_subdevs () {
                               ;;
               esac"
       done
-    }
+    fi
 
     DEV="$(eval echo "\"\${${BASENAME}${LEVEL}}\"")"
     TYPE="$(eval echo "\"\${${BASENAME}${LEVEL}TYPE}\"")"
 
     echo ">> REMOVE level ${LEVEL:-top}: ${DEV} via ${TYPE}"
-    if [ "${SKIP}" -eq 1 ] ; then
+    if [ "${SKIP}" -ne 0 ]; then
       echo '...skipping'
     else
       case "${TYPE}" in
@@ -920,9 +955,9 @@ remove_fs_subdevs () {
              echo "  (*) multiple volumes in one group and/or multiple devs"
              echo "      with different sizes in one group."
              echo "  Logical volume '${LV}' in volume group '${VG}' via '${SUBDEVS}'."
-             [ "${RESTART}" != 'D' ] && {
+             if [ "${RESTART}" != 'D' ]; then
                echo "  The logical volume will be removed as requested."
-             }
+             fi
              echo "  Check if the list output at the bottom(**) shows other logical volumes"
              echo "  in the volume group. If not, then - if wanted - remove the volume group,"
              echo "  its phyiscal volumes and continue with removing the sub devices."
@@ -936,17 +971,17 @@ remove_fs_subdevs () {
              echo "  and maintain these sizes in /root/bin/luks_${BASENAME}.inc"
              echo "  Reload definitions, resize physical volume(s) via pvresize and continue"
              echo "  with shrinking the sub devices."
-             if [ "${DEBVERSION}" -le 4 ] ; then
+             if [ "${DEBVERSION}" -le 4 ]; then
                echo "    lvm lvdisplay -v -m"
-             else
-               echo "    lvm pvdisplay -v -m ${SUBDEVS} ; #or lvm pvs -v --units m --segments ${SUBDEVS}"
              fi
+             echo "    lvm pvdisplay -v -m ${SUBDEVS} ; #or lvm pvs -v --units m --segments ${SUBDEVS}"
              echo "    lvm pvmove --alloc anywhere -n <lv> <dev>[:<oldstart>+<size>] <dev>:<newstart>+<size>"
              echo "    # optionally remove cleared pv from vg and pv itself"
              echo "    #lvm vgreduce '${VG}' <pv>"
              echo "    #lvm pvremove <pv>"
              echo "    #remove_fs_subdevs '${BASENAME}' '${STOPLEVELS}' <level of pv, see below pvresize>"
-             echo "    pvs --units m -o pv_name,pv_used ${SUBDEVS}"
+             echo "    vgs --units m -o vg_name,vg_size,vg_free '${VG}'"
+             echo "    pvs --units m -o pv_name,pv_size,pv_free,pv_used ${SUBDEVS}"
              echo "    nano '/root/bin/luks_${BASENAME}.inc'"
              for SUBLEVEL in ${SUBLEVELS}
               do
@@ -960,21 +995,28 @@ remove_fs_subdevs () {
              done
              echo '  (**)'
              lvm lvs --units m -o +devices "${VG}"
-             [ "${RESTART}" != 'D' ] && {
+             if [ "${RESTART}" != 'D' ]; then
                echo "Removing volume ${DEV}..."
                lvm lvremove "${DEV}" || {
                  echo "  Failed to remove ${DEV}, therefore clean first 8 MiB of it and disable RESUME."
                  echo "    dd if=/dev/zero of='${DEV}' bs=1M count=8"
                  echo "    sed -i -e 's#^[[:space:]]*\(RESUME=\)#\#\1#' /etc/initramfs-tools/conf.d/resume"
                  echo '    update-initramfs -u -k all'
-                 echo '  Reboot and try again'
+                 echo '    # if any initrd update fails, just create a new one from scratch'
+                 echo '     IVERSION="$(uname -r)" ; # FIXME: set to problematic initramfs version'
+                 echo '     rm -f /boot/initrd.img-${IVERSION} ; update-initramfs -c -k ${IVERSION}'
+                 echo '    #'
+                 echo '    reboot'
+                 echo '  and try again'
+                 echo '    for SRC in /root/bin/luks_*.inc ; do . "${SRC}" ; done'
+                 echo "    remove_fs_subdevs '${BASENAME}' '' '${LEVEL}'"
                }
-             }
-             printf '\a'
+             fi
+             printf -- '\a'
              return 1 2>/dev/null || exit 1
              ;;
        (luks) DMNAME="$(eval echo "\"\${${BASENAME}${LEVEL}DMNAME}\"")"
-              if [ "${DEBVERSION}" -le 4 ] ; then
+              if [ "${DEBVERSION}" -le 4 ]; then
                 cryptsetup luksClose "${DMNAME}"
               else
                 cryptdisks_stop "${DMNAME}"
@@ -985,17 +1027,17 @@ remove_fs_subdevs () {
                mdadm --stop "${DEV}"
                mdadm --zero-superblock "$(eval echo "\${${BASENAME}${LEVEL}SUBDEVS}")"
                sed -i -e "\%^ARRAY[[:space:]]\+${DEV}[[:space:]]\+%d" /etc/mdadm/mdadm.conf
-               [ -e "${DEV}" ] && rm "${DEV}"
-               [ -n "${PART}" ] && {
+               [ ! -e "${DEV}" ] || rm "${DEV}"
+               if [ -n "${PART}" ]; then
                  sed -i -e "\%^ARRAY[[:space:]]\+${PART}[[:space:]]\+%d" /etc/mdadm/mdadm.conf
-                 [ -e "${PART}" ] && rm "${PART}"
-               }
+                 [ ! -e "${PART}" ] || rm "${PART}"
+               fi
                ;;
        (mbr) SUBDEVS="$(eval echo "\"\${${BASENAME}${LEVEL}SUBDEVS}\"")"
              PART="$(eval echo "\"\${${BASENAME}${LEVEL}SUBPART}\"")"
-             [ -n "${FDISKCPARM}" ] && sfdisk -l -u S -q ${SUBDEVS}
+             [ -z "${FDISKCPARM}" ] || sfdisk -l -u S -q ${SUBDEVS}
              echo "> ${BASENAME} partition is ${PART}"
-             [ -z "${FDISKCPARM}" ] && echo ">  p"
+             [ -n "${FDISKCPARM}" ] || echo ">  p"
              echo ">  d --> ${PART}"
              echo ">  p"
              echo ">  w (otherwise abort with q)"
@@ -1020,7 +1062,7 @@ remove_fs_subdevs () {
              ;;
        (*) echo "> ATTENTION! Type \"${TYPE}\" of ${DEV} is not supported or unknown, therefore"
            echo '  it has to be handled manually/individually if any action is required.'
-           printf '\a'
+           printf -- '\a'
            return 1 2>/dev/null || exit 1
            ;;
       esac
@@ -1050,20 +1092,19 @@ wait_fs_subdevs () {
 
   local SUBLEVEL
 
-  [ -z "${1}" ] && {
+  if [ -z "${1:-}" ]; then
     echo "Usage: wait_fs_subdevs <var name>" 1>&2
     return 1 2>/dev/null || exit 1
-  }
+  fi
 
   BASENAME="${1}"
-  LEVELS="${2}"
-  [ -z "${LEVELS}" ] && LEVELS='0'
+  LEVELS="${2:-0}"
 
-  unset MDADM
+  unset -v MDADM
 
   for LEVEL in ${LEVELS}
    do
-    [ "${LEVEL}" = '0' ] && unset LEVEL
+    [ "${LEVEL}" != '0' ] || LEVEL=''
 
     DEV="$(eval echo "\"\${${BASENAME}${LEVEL}}\"")"
     TYPE="$(eval echo "\"\${${BASENAME}${LEVEL}TYPE}\"")"
@@ -1078,7 +1119,7 @@ wait_fs_subdevs () {
      (mbr|gpt) ;;
      (*) echo "> ATTENTION! Type \"${TYPE}\" of ${DEV} is not supported or unknown, therefore"
          echo '  it has to be handled manually/individually if any action is required.'
-         printf '\a'
+         printf -- '\a'
          ;;
     esac
 
@@ -1088,10 +1129,10 @@ wait_fs_subdevs () {
     done
   done
 
-  [ -n "${MDADM}" ] && {
+  if [ -n "${MDADM:-}" ]; then
     mdadm_wait ${MDADM} ; # TAKES TIME!!!
-    printf '\a'
-  }
+    printf -- '\a'
+  fi
 
   return 0
 }

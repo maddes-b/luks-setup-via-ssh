@@ -1,10 +1,16 @@
-#!/bin/sh -e
+#!/bin/sh -eu
 
 for SRC in /root/bin/luks_MINIDEB*.inc ; do [ ! -s "${SRC}" ] || . "${SRC}" ; done
-[ -z "${MINIDEB}" ] && { echo 'ERROR: var MINIDEB not set'; return 1 2>/dev/null || exit 1; }
+if [ -z "${MINIDEB:-}" ]; then
+  echo 'ERROR: var MINIDEB not set'
+  return 1 2>/dev/null || exit 1
+fi
 
 for SRC in /root/bin/luks_OLD*.inc ; do [ ! -s "${SRC}" ] || . "${SRC}" ; done
-[ -z "${OLDROOT}" ] && { echo 'ERROR: var OLDROOT not set'; return 1 2>/dev/null || exit 1; }
+if [ -z "${OLDROOT:-}" ]; then
+  echo 'ERROR: var OLDROOT not set'
+  return 1 2>/dev/null || exit 1
+fi
 
 for SRC in /root/bin/luks_NEW*.inc ; do [ ! -s "${SRC}" ] || . "${SRC}" ; done
 
@@ -20,10 +26,10 @@ grep -q -F -e "${MOUNTBASE} " /proc/mounts || {
   done
 }
 
-unset BOOTMOUNT
-[ "${1}" = 'noboot' ] || {
+unset -v BOOTMOUNT
+if [ "${1:-}" != 'noboot' ]; then
   BOOTMOUNT="$(eval echo "\${${1:-OLDBOOT}MOUNT}")"
-}
+fi
 
 grep -q -F -e "${MOUNTBASE}/boot " /proc/mounts && {
   echo "Unmounting ${MOUNTBASE}/boot"
@@ -33,7 +39,7 @@ grep -q -F -e "${MOUNTBASE}/boot " /proc/mounts && {
   done
 }
 
-[ -z "${BOOTMOUNT}" ] || {
+if [ -n "${BOOTMOUNT:-}" ]; then
   grep -q -F -e "${MOUNTBASE}/boot " /proc/mounts || {
     echo "Mounting ${BOOTMOUNT} on ${MOUNTBASE}/boot"
 #    mount --bind /boot "${MOUNTBASE}/boot"
@@ -42,7 +48,7 @@ grep -q -F -e "${MOUNTBASE}/boot " /proc/mounts && {
       :
     done
   }
-}
+fi
 
 mount_sys.sh "${MOUNTBASE}"
 
