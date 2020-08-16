@@ -1,0 +1,388 @@
+#!/bin/sh
+
+# add dropbear to the initrd to be able to mount crypto partitions from remote
+
+PREREQ=""
+prereqs()
+{
+        echo "${PREREQ}"
+}
+
+case "${1}" in
+ prereqs)
+        prereqs
+        exit 0
+        ;;
+esac
+
+# Begin real processing below this line
+
+# Original copyright Wulf Coulmann
+# 2010-2014 (c) Matthias Bücher
+# GNU GPL
+# http://www.gnu.org/licenses/gpl.html
+#
+# Download me here: http://gpl.coulmann.de/dropbear -or- https://github.com/maddes-b/luks-setup-via-ssh
+# get infos about this script here:
+# http://gpl.coulmann.de/ssh_luks_unlock.html
+#
+# version 1.0.2 by Matthias "Maddes" Bücher
+#
+# Read the script completely and thoroughly.
+# Search for "CHECK HERE" to find the most important configuration stuff.
+#
+# The following Debian releases were tested:
+#   4.0r9 with version 1.0.2 (incl. DHCP, mdadm, lvm)
+#   5.0.8 with version 1.0.1 (incl. DHCP)
+#   6.0.2 with version 1.0.1 (incl. DHCP)
+#   4.0r7 with version 0.8a
+#   5.0.0 with version 0.8a (incl. DHCP)
+#
+# To test this hook script use: mkinitramfs -o /tmp/initrd-dropbear-test
+#   With the -k option you can also investigate the temporary directory used to make the image
+#
+# Changelog 1.0.2 - "after life"
+# - corrected prereqs for cryptroot_block that it is executed at last but before cryptroot, so mdadm and lvm work too
+#
+# Changelog 1.0.1 - "final, over and out"
+# - check for Debian-based OS
+# - allow full script to run for Debian up to 5.0 "Lenny"
+# - added solution for 6.0 "Squeeze" (scripts: unlock, rm_dropbear), so users do not get logged out during upgrade
+# - marked all interesting config stuff with CHECK HERE
+# - adopted copying DropBear stuff from Debian 6.0 "Squeeze" to get rid of possible exposure of SSH private data
+#   use separate config and keys from /etc/initramfs-tools/etc/dropbear if available
+#
+# Changelog 1.0
+# - This initrd hook is deprecated since Debian 6.0 "Squeeze". It will not be maintaind anymore.
+#   Debian has its native solution now, see /usr/share/doc/cryptsetup/README.remote.gz
+#
+# Changelog 0.9.1:
+# - add /lib/libnsl.so.1 (thanks Gijs)
+#
+# Changelog 0.9a:
+# - further code clean-up
+#
+# Changelog 0.9:
+# - added quotes to ${INPUT}
+#
+# Changelog 0.8a:
+# - changes from german c't magazine, 12/2008, S.188, article "Fernverschluesselt: Verschluesselte Root-Partition fuer Linux-Systeme":
+#   - /usr/bin creation
+#   - copy urandom seed
+#   - copy only root password from /etc/shadow
+#   - use more significant marker __EOF
+# - changes from Maddes.net, 2009-02-18:
+#   - merged c't changes into version 0.8
+#   - added mkdir commands to make it work with Debian 4.0
+#   - added commands for DHCP to make it work with Debian 5.0
+#   - default to DHCP
+#   - explicitly stated variables ${}
+#   - added comments about disabling passwort logins for ssh and empty /etc/shadow
+#   - fixed typos
+#   - tested functionality with Debian 4.0r7 and 5.0r0
+
+# check for Debian-based OS and its Debian version
+[ ! -f '/etc/debian_version' ] && {
+	echo "ERROR: initrd hook ${0} is intended for Debian and its derivates only."
+	exit 72
+}
+
+VERSIONBYNAME=0
+[ -f '/etc/issue' ] && grep -q -F -e 'Ubuntu' /etc/issue && VERSIONBYNAME=1
+
+[ ${VERSIONBYNAME} -eq 0 ] && DEBVERSION=`cut -f 1 -d '.' /etc/debian_version`
+[ ${VERSIONBYNAME} -ne 0 ] && {
+	DEBRELEASE=`cut -f 1 -d '/' /etc/debian_version`
+	DEBVERSION=99 ;	# Debian version unsupported (like squeeze) or untested (like sarge, woody, potato, slink, hamm)
+	[ "${DEBRELEASE}" = "etch" ] && DEBVERSION=4
+	[ "${DEBRELEASE}" = "lenny" ] && DEBVERSION=5
+}
+
+# script for Debian 4/5 and also 6
+# make sure to exit dropbear at the end of the InitRD startup process
+[ -d "${DESTDIR}/scripts/local-bottom/" ] || mkdir -p "${DESTDIR}/scripts/local-bottom/"
+cat > "${DESTDIR}/scripts/local-bottom/rm_dropbear" << '__EOF'
+#!/bin/sh
+PREREQ=""
+prereqs()
+{
+        echo ""
+}
+
+case "${1}" in
+ prereqs)
+        prereqs
+        exit 0
+        ;;
+esac
+
+# Begin real processing below this line
+# kill dropbear ssh server
+
+killall dropbear
+
+__EOF
+chmod 700 "${DESTDIR}/scripts/local-bottom/rm_dropbear"
+
+[ "${DEBVERSION}" -ge 6 ] && {
+	printf '\a'
+	echo "WARN: initrd hook ${0} is deprecated since Debian 6.0 \"Squeeze\"."
+	echo '      It still works for Debian 6.0, so it can be used as a temporary solution'
+	echo '      during an upgrade.'
+	echo ' '
+	echo '      Debian has its native solution now, see /usr/share/doc/cryptsetup/README.remote.gz'
+	echo '      and https://www.maddes.net/software/luks.htm.'
+	echo "      Please deactivate ${0} by removing it and re-create the initrd again."
+	echo ' '
+	echo '      If you are currently upgrading to 6.0, then before upgrading kernel and udev'
+	echo '      make sure to clean up /etc/initramfs/hooks/ and /etc/initramfs/scripts/'
+	echo '      from old cryptroot and udev stuff. Maybe add new hooks and scripts for unlocking'
+	echo '      encrypted root remotely, see https://www.maddes.net/software/luks.htm.'
+	echo '      Then re-create the initrd again.'
+	echo '      DO NOT REBOOT UNTIL YOU ARE SURE THAT YOU HAVE DONE ALL COMPLETELY.'
+
+	[ -d "${DESTDIR}/usr/bin/" ] || mkdir -p "${DESTDIR}/usr/bin/"
+	cat > "${DESTDIR}/usr/bin/unlock" << '__EOF'
+#!/bin/sh
+
+/lib/cryptsetup/askpass "Enter volume password: " > /lib/cryptsetup/passfifo
+
+__EOF
+	chmod 700 "${DESTDIR}/usr/bin/unlock"
+
+	exit 0
+}
+
+# load the prepared functions of Debian's initramfs environment
+. "${CONFDIR}/initramfs.conf"
+. /usr/share/initramfs-tools/hook-functions
+#
+if [ -e /etc/initramfs-tools/conf.d/dropbear ]; then
+	. /etc/initramfs-tools/conf.d/dropbear
+fi
+
+# Install dropbear if explicitly enabled, or in case of a cryptroot setup if not explicitly disabled
+if [ "${DROPBEAR}" = "y" ] || ( [ "${DROPBEAR}" != "n" ] && [ -r "/etc/crypttab" ] ); then
+	true	# do nothing
+else
+	exit 0
+fi
+
+# build the directories
+DIRS='/usr/sbin/ /usr/bin/ /proc/ /root/.ssh/ /var/ /var/lib/ /var/lib/urandom/ /var/run/'
+
+for now in ${DIRS} ; do
+        if [ ! -d "${DESTDIR}${now}" ] ; then
+                mkdir -p "${DESTDIR}${now}"
+        fi
+done
+
+# copy the main ssh-daemon including libaries
+copy_exec /usr/sbin/dropbear /usr/sbin/
+copy_exec /usr/bin/passwd /usr/bin/
+copy_exec /bin/login /bin/
+copy_exec /sbin/dhclient /sbin/
+copy_exec /sbin/dhclient-script /sbin/
+cp -pr /etc/dhcp3/ "${DESTDIR}/etc/"
+cp -pr /var/lib/dhcp3 "${DESTDIR}/var/lib/"
+
+# some libraries are not autoincluded by copy_exec
+cp /lib/libnss_* "${DESTDIR}/lib/"
+copy_exec /etc/ld.so.cache /etc/
+copy_exec /lib/libnsl.so.1 /lib/
+
+# copy ssh-daemon config and host key files
+if [ -d /etc/initramfs-tools/etc/dropbear/ ]; then
+	cp -pr /etc/initramfs-tools/etc/dropbear "${DESTDIR}/etc/"
+elif [ -d /etc/dropbear/ ]; then
+	cp -pr /etc/dropbear "${DESTDIR}/etc/"
+	echo "dropbear: WARNING: host keys of encrypted root exposed in initrd"
+	echo "dropbear: WARNING: If host keys of encrypted root should not be exposed (recommended), then create new host keys in /etc/initramfs-tools/etc/dropbear/"
+else
+	echo "dropbear: ERROR: /etc/dropbear not found, neither directly or in /etc/initramfs-tools, remote unlocking of cryptroot via ssh won't work!"
+fi
+for keytype in 'dss' 'rsa'; do
+	if [ ! -f "${DESTDIR}/etc/dropbear/dropbear_${keytype}_host_key" ]; then
+		echo "dropbear: ERROR: ${keytype} host key not found, remote unlocking of cryptroot via ssh won't work!"
+	fi
+done
+
+# copy user config files
+cp -pr /etc/passwd "${DESTDIR}/etc/"    # quick and dirty, to keep file attributes
+cp -pr /etc/shadow "${DESTDIR}/etc/"    # quick and dirty, to keep file attributes
+cp -pr /etc/group "${DESTDIR}/etc/"
+
+# only have the root account with a changed shell and no password (all other users are left out)
+echo "root:x:0:0:root:/root:/bin/sh" > "${DESTDIR}/etc/passwd"
+echo "root:!:0:0:99999:7:::" > "${DESTDIR}/etc/shadow"
+
+# CHECK HERE
+# copy password of root account
+# if password logins via ssh are forbidden (dropbear option -s)
+#   then do not copy /etc/shadow here, as the initrd is not encrypted
+grep -G -e "^root" < /etc/shadow > "${DESTDIR}/etc/shadow"
+
+# copy authorized_keys file for root
+chmod go=-s "${DESTDIR}/root/.ssh/"
+if [ -f /etc/initramfs-tools/root/.ssh/authorized_keys ]; then
+	cp -p /etc/initramfs-tools/root/.ssh/authorized_keys "${DESTDIR}/root/.ssh/"
+	echo "dropbear: INFO: make sure that the entries in /etc/initramfs-tools/root/.ssh/authorized_keys are complete."
+elif [ -f /root/.ssh/authorized_keys ]; then
+	cp -p /root/.ssh/authorized_keys "${DESTDIR}/root/.ssh/"
+fi
+if [ ! -s "${DESTDIR}/root/.ssh/authorized_keys" ]; then
+	echo "dropbear: WARNING: no or empty authorized_keys file. it is recommended to use public key authorization and disable passwords."
+fi
+
+# copy misc config files
+cp -pr /etc/nsswitch.conf "${DESTDIR}/etc/"
+cp -pr /etc/localtime "${DESTDIR}/etc/"
+cp -pr /var/lib/urandom/random-seed "${DESTDIR}/var/lib/urandom/"
+
+# there is no bash in the created initrd, so create a link to sh for it
+ln -s /bin/sh "${DESTDIR}/bin/bash"
+
+# missing stuff for DHCP
+# --> already inside busybox and working
+ln -s /bin/busybox "${DESTDIR}/bin/hostname"
+ln -s /bin/busybox "${DESTDIR}/bin/ifconfig"
+ln -s /bin/busybox "${DESTDIR}/bin/mv"
+ln -s /bin/busybox "${DESTDIR}/bin/rm"
+ln -s /bin/busybox "${DESTDIR}/bin/route"
+# --> extras where busybox is not compatible/working
+copy_exec /bin/chmod /bin/
+copy_exec /bin/chown /bin/
+copy_exec /bin/run-parts /bin/
+# --> libraries
+copy_exec /lib/libncurses.so.5 /lib/
+
+# the blocker script to request input action before running cryptroot
+# this let us run cryptroot on the local terminal and also inside ssh
+# dirty but effective
+[ -d "${DESTDIR}/scripts/local-top/" ] || mkdir -p "${DESTDIR}/scripts/local-top/"
+cat > "${DESTDIR}/scripts/local-top/cryptroot_block" << '__EOF'
+#!/bin/sh
+PREREQ='network_ssh'
+
+#
+# Standard initramfs preamble
+#
+prereqs()
+{
+  # Make sure that cryptroot_block is run last in local-top, but before cryptroot
+  PREREQ='network_ssh'
+  for REQ in /scripts/local-top/*
+   do
+    SCRIPT=$(basename ${REQ})
+    if [ "${SCRIPT}" != 'cryptroot' -a "${SCRIPT}" != 'cryptroot_block' ]; then
+      PREREQ="${PREREQ} ${SCRIPT}"
+    fi
+  done
+  echo "${PREREQ}"
+}
+
+case "${1}" in
+ prereqs)
+        prereqs
+        exit 0
+        ;;
+esac
+
+# Begin real processing below this line
+
+echo Type "ok" and press enter to put in passphrase:
+
+INPUT='wait'
+
+while [ "${INPUT}" != 'ok' ] ; do
+        read INPUT
+done
+
+__EOF
+chmod 700 "${DESTDIR}/scripts/local-top/cryptroot_block"
+
+
+[ -d "${DESTDIR}/scripts/local-top/" ] || mkdir -p "${DESTDIR}/scripts/local-top/"
+cat > "${DESTDIR}/scripts/local-top/network_ssh" << '__EOF'
+#!/bin/sh
+
+# start network and ssh server
+
+PREREQ=""
+prereqs()
+{
+        echo "${PREREQ}"
+}
+
+case "${1}" in
+ prereqs)
+        prereqs
+        exit 0
+        ;;
+esac
+
+# Begin real processing below this line
+
+
+# build up helpful environment
+[ -d /dev ] || mkdir -m 0755 /dev
+[ -d /root ] || mkdir --mode=0700 /root
+[ -d /sys ] || mkdir /sys
+[ -d /proc ] || mkdir /proc
+[ -d /tmp ] || mkdir /tmp
+mkdir -p /var/lock
+mount -t sysfs -o nodev,noexec,nosuid none /sys
+mount -t proc -o nodev,noexec,nosuid none /proc
+
+mkdir /dev/pts
+mount -t devpts -o gid=5,mode=620 /dev/pts /dev/pts
+
+# CHECK HERE
+# network setup: edit ip address, mask and gateway to the server's needs
+#ifconfig eth0 192.168.1.10 netmask 255.255.255.0
+#route add default gw 192.168.1.100
+# to configure via dhcp make sure to include dhclient or pump in
+# /etc/initramfs-tools/hooks/dropbear via
+#     copy_exec /sbin/dhclient /sbin/
+ifconfig eth0 up
+/sbin/dhclient eth0
+
+# CHECK HERE
+# for debugging the ssh server force it to the foreground
+#      /usr/sbin/dropbear -E -F -b /etc/dropbear/banner
+# for more debugging run it with strace
+# therefore include strace and nc at top of
+# /etc/initramfs-tools/hooks/dropbear via
+#     copy_exec /usr/bin/strace
+#     copy_exec /bin/nc
+# then start nc on another host and run
+#     strace -f /usr/sbin/dropbear -E -F 2>&1 | /bin/nc -vv <ip of other host> <nc port of other host>
+#     e.g.:
+#     strace -f /usr/sbin/dropbear -E -F 2>&1 | /bin/nc -vv 192.168.1.2 8888
+
+# CHECK HERE
+# to forbid password logins via ssh use -s
+#   then also empty /etc/shadow above, as the initrd is not encrypted
+/usr/sbin/dropbear -b /etc/dropbear/banner
+__EOF
+chmod 700 "${DESTDIR}/scripts/local-top/network_ssh"
+
+[ -d "${DESTDIR}/etc/dropbear/" ] || mkdir -p "${DESTDIR}/etc/dropbear/"
+cat > "${DESTDIR}/etc/dropbear/banner" << '__EOF'
+
+     To unlock root-partition run
+        unlock
+
+__EOF
+
+
+# script to unlock luks via ssh
+# dirty but effective
+[ -d "${DESTDIR}/usr/bin/" ] || mkdir -p "${DESTDIR}/usr/bin/"
+cat > "${DESTDIR}/usr/bin/unlock" << '__EOF'
+#!/bin/sh
+
+/bin/sh /scripts/local-top/cryptroot && mv /scripts/local-top/cryptroot /root && kill `ps | grep -F -e 'cryptroot_block' | grep -v -F -e 'grep' | awk '{ print $1 }'`
+
+__EOF
+chmod 700 "${DESTDIR}/usr/bin/unlock"

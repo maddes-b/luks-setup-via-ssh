@@ -1,0 +1,29 @@
+#!/bin/sh
+
+#
+# This InitRAMFS hook provides:
+# Simple script to set IP parameter in InitRAMFS config with current
+# hostname, instead of manually maintaining InitRAMFS config.
+#
+
+PREREQ=""
+
+prereqs()
+{
+	echo "${PREREQ}"
+}
+
+case "${1}" in
+ prereqs)
+	prereqs
+	exit 0
+	;;
+esac
+
+. /usr/share/initramfs-tools/hook-functions
+
+#
+# Begin real processing
+#
+[ ! -f "${DESTDIR}/conf/initramfs.conf" ] || sed -i -e "s#\${hostname}#$(hostname)#" "${DESTDIR}/conf/initramfs.conf"
+[ ! -f "${DESTDIR}/conf/conf.d/network" ] || sed -i -e "s#\${hostname}#$(hostname)#" "${DESTDIR}/conf/conf.d/network"

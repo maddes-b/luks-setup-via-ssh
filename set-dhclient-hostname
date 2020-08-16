@@ -1,0 +1,11 @@
+#!/bin/sh
+
+## Only necessary up to Debian 6.0
+
+CONFFILE='/etc/dhcp3/dhclient.conf'
+[ -f "${CONFFILE}" ] || CONFFILE='/etc/dhcp/dhclient.conf'
+
+[ ! -f "${CONFFILE}" ] || {
+  sed -i -e "/^[[:space:]]*send[[:space:]]\+host-name[[:space:]]\+=[[:space:]]\+/ s#\".*\"#\"$(hostname)\"#" "${CONFFILE}"
+  grep -q -e '^[[:space:]]*send[[:space:]]\+host-name[[:space:]]\+=[[:space:]]\+' "${CONFFILE}" || echo "send host-name = \"$(hostname)\";" >> "${CONFFILE}"
+}

@@ -1,0 +1,10 @@
+--- /usr/share/initramfs-tools/scripts/local-top/cryptroot	2007-01-09 21:56:30.000000000 +0100
++++ /usr/share/initramfs-tools/scripts/local-top/cryptroot	2016-07-31 17:42:43.000000000 +0200
+@@ -171,6 +171,7 @@ setup_mapping()
+ 		activate_evms $cryptsource
+ 	fi
+ 
++	[ -e $cryptsource ] || sleep 1
+ 	if [ ! -e $cryptsource ]; then
+ 		echo "cryptsetup: Source device $cryptsource not found"
+ 		return 1

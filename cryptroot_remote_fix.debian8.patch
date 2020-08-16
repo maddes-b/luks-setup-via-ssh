@@ -1,0 +1,36 @@
+--- /usr/share/initramfs-tools/scripts/local-top/cryptroot	2015-01-22 22:03:47.000000000 +0100
++++ /usr/share/initramfs-tools/scripts/local-top/cryptroot	2015-07-14 12:30:09.000000000 +0200
+@@ -16,11 +16,15 @@ prereqs()
+ 	done
+ }
+ 
++NOPLYMOUTH=0
++
+ case $1 in
+ prereqs)
+ 	prereqs
+ 	exit 0
+ 	;;
++remote)
++	NOPLYMOUTH=1
+ esac
+ 
+ # source for log_*_msg() functions, see LP: #272301
+@@ -31,7 +35,7 @@ esac
+ #
+ message()
+ {
+-	if [ -x /bin/plymouth ] && plymouth --ping; then
++	if [ "${NOPLYMOUTH:-0}" -eq 0 -a -x /bin/plymouth ] && plymouth --ping; then
+ 		plymouth message --text="$@"
+ 	else
+ 		echo "$@" >&2
+@@ -285,7 +289,7 @@ setup_mapping()
+ 				diskname="$cryptsource ($crypttarget)"
+ 			fi
+ 
+-			if [ -x /bin/plymouth ] && plymouth --ping; then
++			if [ "${NOPLYMOUTH:-0}" -eq 0 -a -x /bin/plymouth ] && plymouth --ping; then
+ 				cryptkeyscript="plymouth ask-for-password --prompt"
+ 				# Plymouth will add a : if it is a non-graphical prompt
+ 				cryptkey="Please unlock disk $diskname"

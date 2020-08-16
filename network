@@ -1,0 +1,13 @@
+# Define your network setup for the InitRAMFS via IP variable
+#
+# Still a kernel ip parameter will override any InitRAMFS config
+# setting (see script /usr/share/initramfs-tools/init).
+#
+# Additional information:
+# * https://www.kernel.org/doc/Documentation/filesystems/nfs/nfsroot.txt
+#   In Debian as kernel command via /etc/default/grub
+# * The "variable" ${hostname} (case-sensitive) will be replaced on InitRAMFS creation
+#   with the current host name through the hook `set_hostname_in_network_config`
+#   This allows the machine to be registered with its name in DNS.
+
+IP=::::${hostname}
